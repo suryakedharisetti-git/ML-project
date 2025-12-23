@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from pymongo import MongoClient
 from dotenv import load_dotenv
+from pathlib import Path
 import os
 
 # ---------------------------
@@ -27,7 +28,15 @@ except Exception as e:
 # ---------------------------
 # Load dataset
 # ---------------------------
-df = pd.read_csv("../data/hidden_hunger.csv")
+# ---------------------------
+# Load dataset (resolve path relative to this script)
+# ---------------------------
+data_path = Path(__file__).resolve().parent / "hidden_hunger.csv"
+if not data_path.exists():
+    # fallback to legacy `../data/hidden_hunger.csv` if present
+    data_path = Path(__file__).resolve().parent.parent / "data" / "hidden_hunger.csv"
+
+df = pd.read_csv(data_path)
 
 st.title("🌾 NutriScope — Hidden Hunger Detection App")
 st.markdown("### Enter the following nutritional and demographic details:")
