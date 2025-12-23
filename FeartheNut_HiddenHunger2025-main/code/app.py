@@ -27,7 +27,7 @@ except Exception as e:
 # ---------------------------
 # Load dataset
 # ---------------------------
-df = pd.read_csv("hidden_hunger.csv")
+df = pd.read_csv("../data/hidden_hunger.csv")
 
 st.title("🌾 NutriScope — Hidden Hunger Detection App")
 st.markdown("### Enter the following nutritional and demographic details:")
