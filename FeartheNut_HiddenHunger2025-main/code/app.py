@@ -19,25 +19,39 @@ MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
 
 mongo_uri = f"mongodb://{MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}"
 
-try:
-    client = MongoClient(mongo_uri)
-    db = client[MONGO_DB]
-    collection = db[MONGO_COLLECTION]
-except Exception as e:
-    st.error(f"MongoDB Connection Failed: {e}")
 # ---------------------------
-# Load dataset
+# Detect Streamlit Cloud
 # ---------------------------
-# ---------------------------
-# Load dataset (resolve path relative to this script)
-# ---------------------------
-data_path = Path(__file__).resolve().parent / "hidden_hunger.csv"
-if not data_path.exists():
-    # fallback to legacy `../data/hidden_hunger.csv` if present
-    data_path = Path(__file__).resolve().parent.parent / "data" / "hidden_hunger.csv"
+IS_STREAMLIT_CLOUD = os.getenv("STREAMLIT_RUNTIME_ENV") is not None
 
-df = pd.read_csv(data_path)
+# ---------------------------
+# MongoDB (LOCAL ONLY)
+# ---------------------------
+collection = None
 
+if not IS_STREAMLIT_CLOUD:
+    try:
+        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=2000)
+        db = client[MONGO_DB]
+        collection = db[MONGO_COLLECTION]
+    except Exception:
+        collection = None  # silently ignore MongoDB errors
+
+# ---------------------------
+# Load dataset safely
+# ---------------------------
+BASE_DIR = Path(__file__).resolve().parent
+DATA_PATH = BASE_DIR / "hidden_hunger.csv"
+
+# Optional fallback
+if not DATA_PATH.exists():
+    DATA_PATH = BASE_DIR.parent / "data" / "hidden_hunger.csv"
+
+df = pd.read_csv(DATA_PATH)
+
+# ---------------------------
+# UI
+# ---------------------------
 st.title("🌾 NutriScope — Hidden Hunger Detection App")
 st.markdown("### Enter the following nutritional and demographic details:")
 
@@ -67,26 +81,22 @@ folate = st.number_input("Folate Intake (µg)", min_value=0.0, step=1.0)
 # ---------------------------
 if st.button("🔍 Predict Hidden Hunger Risk"):
 
-    input_df = pd.DataFrame(
-        [
-            {
-                "Age": age,
-                "Gender": gender,
-                "Income_Bracket": income,
-                "Education_Level": education,
-                "Vitamin_A_Intake_ug": vitamin_a,
-                "Vitamin_D_Intake_IU": vitamin_d,
-                "Zinc_Intake_mg": zinc,
-                "Iron_Intake_mg": iron,
-                "Folate_Intake_ug": folate,
-            }
-        ]
-    )
+    input_df = pd.DataFrame([{
+        "Age": age,
+        "Gender": gender,
+        "Income_Bracket": income,
+        "Education_Level": education,
+        "Vitamin_A_Intake_ug": vitamin_a,
+        "Vitamin_D_Intake_IU": vitamin_d,
+        "Zinc_Intake_mg": zinc,
+        "Iron_Intake_mg": iron,
+        "Folate_Intake_ug": folate,
+    }])
 
     st.subheader("📋 Input Data Preview")
     st.dataframe(input_df)
 
-    # Calculate ratios
+    # Ratios
     ratios = {
         "Vitamin A": vitamin_a / avg_vitamin_a,
         "Vitamin D": vitamin_d / avg_vitamin_d,
@@ -122,14 +132,12 @@ if st.button("🔍 Predict Hidden Hunger Risk"):
     )
 
     # ---------------------------
-    # Save to MongoDB
+    # Save to MongoDB (LOCAL ONLY, SILENT)
     # ---------------------------
-    try:
-        record = input_df.to_dict("records")[0]
-        record["Risk_Score"] = float(risk_score)
-
-        collection.insert_one(record)
-        st.success("Successfully updated")
-
-    except Exception as e:
-        st.error(f"❌ Failed to save to MongoDB: {e}")
+    if collection is not None:
+        try:
+            record = input_df.to_dict("records")[0]
+            record["Risk_Score"] = float(risk_score)
+            collection.insert_one(record)
+        except Exception:
+            pass  # never show DB errors to users
